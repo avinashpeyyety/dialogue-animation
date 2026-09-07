@@ -22,6 +22,15 @@ import {
   LAUNCH_SITES,
   EARTH_R,
 } from "./earth.js";
+import {
+  createStarLifecycle,
+  updateStarLifecycle,
+  setLifecyclePath,
+  setLifecycleProgress,
+  getLifecycleCameraFrame,
+  getLifecycleStages,
+  getLifecycleStage,
+} from "./starLifecycle.js";
 
 // —— Visual AU scale (compress outer system for readability) ——
 // true AU → scene units via soft power curve
@@ -78,11 +87,13 @@ const state = {
   follow: false,
   focusId: "sun",
   epoch: new Date("2000-01-01T12:00:00Z"),
-  /** solar | earth | leo */
+  /** solar | earth | leo | stars */
   viewMode: "solar",
   earthSiteId: null,
   earthMissionId: null,
   followLaunchCam: true,
+  lifePath: "low",
+  lifeEnd: "ns",
 };
 
 const bodyRuntime = new Map(); // id -> { group, mesh, orbitLine, label, def, phase0 }
@@ -91,6 +102,7 @@ let starField;
 let asteroidBelt;
 let labelSprites = [];
 let earthTheater = null;
+let starLife = null;
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let camTween = null; // { fromPos, toPos, fromTarget, toTarget, t, dur }
@@ -148,6 +160,7 @@ function formatElapsed(days) {
 function formatDate(epoch, days) {
   const d = new Date(epoch.getTime() + days * 86400000);
   if (Number.isNaN(d.getTime())) return "—";
+  if (state.viewMode === "stars") return "cosmic scrub";
   if (state.viewMode !== "solar") return d.toISOString().replace("T", " ").slice(0, 16) + "Z";
   return d.toISOString().slice(0, 10);
 }
@@ -192,16 +205,100 @@ function setModeButtons(mode) {
   $("btn-solar")?.classList.toggle("active", mode === "solar");
   $("btn-earth")?.classList.toggle("active", mode === "earth" || mode === "site");
   $("btn-leo")?.classList.toggle("active", mode === "leo");
+  $("btn-stars")?.classList.toggle("active", mode === "stars");
+}
+
+
+function hideLifecycleUI() {
+  $("life-bar")?.classList.add("hidden");
+  document.body.classList.remove("stars-mode", "stars-high");
+  if (starLife) {
+    starLife.root.visible = false;
+    starLife.playing = false;
+  }
+  if (speedReadout) speedReadout.textContent = formatScale(state.timeScale);
+}
+
+function syncLifecycleHud(stage) {
+  if (!starLife) return;
+  const s = stage || getLifecycleStage(starLife);
+  if ($("life-stage-name")) $("life-stage-name").textContent = s.name;
+  if ($("life-era")) $("life-era").textContent = s.era || "";
+  if ($("life-note")) $("life-note").textContent = s.note || "";
+  const scrub = $("life-scrub");
+  if (scrub && document.activeElement !== scrub) {
+    scrub.value = String(Math.round(starLife.t * 1000));
+  }
+  document.querySelectorAll(".life-tick").forEach((el) => {
+    el.classList.toggle("active", el.dataset.id === s.id);
+  });
+  detailName.textContent = s.name;
+  detailType.textContent = state.lifePath === "high" ? "High-mass track" : "Low-mass track";
+  detailBlurb.textContent = s.note;
+  const endLabel =
+    state.lifePath === "high"
+      ? state.lifeEnd === "bh"
+        ? "Black hole"
+        : "Neutron star"
+      : "White dwarf";
+  detailStats.innerHTML = [
+    ["Mode", "Star lifecycle"],
+    ["Path", state.lifePath === "high" ? "Massive (≥8 M☉)" : "Sun-like (~1 M☉)"],
+    ["Stage", s.short || s.name],
+    ["Fork", state.lifePath === "high" ? "SN → NS / BH" : "PN → WD"],
+    ["End", endLabel],
+    ["Key", "T · scrub timeline"],
+  ]
+    .map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`)
+    .join("");
+}
+
+function buildLifecycleTicks() {
+  const host = $("life-ticks");
+  if (!host || !starLife) return;
+  const stages = getLifecycleStages(starLife);
+  host.innerHTML = stages
+    .map(
+      (s) =>
+        `<button type="button" class="life-tick" data-id="${s.id}" data-t="${((s.t0 + s.t1) / 2).toFixed(3)}" title="${s.name}">${s.short}</button>`
+    )
+    .join("");
+  host.querySelectorAll(".life-tick").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setLifecycleProgress(starLife, Number(btn.dataset.t));
+      starLife.playing = false;
+      syncLifecycleHud();
+    });
+  });
+}
+
+function applyLifecyclePath(path, endState) {
+  if (!starLife) return;
+  state.lifePath = path === "high" ? "high" : "low";
+  if (endState === "bh" || endState === "ns") state.lifeEnd = endState;
+  setLifecyclePath(starLife, state.lifePath, state.lifeEnd);
+  document.body.classList.toggle("stars-high", state.lifePath === "high");
+  $("life-mass-low")?.classList.toggle("active", state.lifePath === "low");
+  $("life-mass-high")?.classList.toggle("active", state.lifePath === "high");
+  $("life-end-ns")?.classList.toggle("active", state.lifeEnd === "ns");
+  $("life-end-bh")?.classList.toggle("active", state.lifeEnd === "bh");
+  $("life-caption").textContent =
+    state.lifePath === "high"
+      ? "High-mass track · after supergiant: supernova → neutron star or black hole"
+      : "Low-mass track · after red giant: planetary nebula → white dwarf";
+  buildLifecycleTicks();
+  syncLifecycleHud();
 }
 
 function enterSolarMode() {
   state.viewMode = "solar";
   state.earthSiteId = null;
   state.earthMissionId = null;
-  document.body.classList.remove("earth-mode", "leo-mode");
+  document.body.classList.remove("earth-mode", "leo-mode", "stars-mode", "stars-high");
   setModeButtons("solar");
   $("brand-sub").textContent = "Solar system · ephemeris-lite";
   $("earth-bar")?.classList.add("hidden");
+  hideLifecycleUI();
   if (earthTheater) {
     earthTheater.root.visible = false;
     setEarthMode(earthTheater, "surface");
@@ -228,9 +325,10 @@ function enterSolarMode() {
 function enterEarthMode() {
   state.viewMode = "earth";
   document.body.classList.add("earth-mode");
-  document.body.classList.remove("leo-mode");
+  document.body.classList.remove("leo-mode", "stars-mode", "stars-high");
   setModeButtons("earth");
   $("brand-sub").textContent = "Earth surface · launch sites";
+  hideLifecycleUI();
   $("earth-bar")?.classList.remove("hidden");
   $("earth-bar-title").textContent = "Earth surface";
   $("earth-caption").textContent = "Click a marker or pick a site below";
@@ -252,9 +350,10 @@ function enterLeoMode() {
   state.earthSiteId = null;
   state.earthMissionId = null;
   document.body.classList.add("leo-mode");
-  document.body.classList.remove("earth-mode");
+  document.body.classList.remove("earth-mode", "stars-mode", "stars-high");
   setModeButtons("leo");
   $("brand-sub").textContent = "Low Earth Orbit · stations";
+  hideLifecycleUI();
   $("earth-bar")?.classList.remove("hidden");
   $("earth-bar-title").textContent = "Low Earth Orbit";
   $("earth-caption").textContent = "Clean orbital theater — separate from surface launches";
@@ -282,9 +381,36 @@ function enterLeoMode() {
   $("earth-phase").textContent = "Low Earth Orbit";
 }
 
+
+function enterStarsMode() {
+  state.viewMode = "stars";
+  state.earthSiteId = null;
+  state.earthMissionId = null;
+  document.body.classList.add("stars-mode");
+  document.body.classList.remove("earth-mode", "leo-mode");
+  document.body.classList.toggle("stars-high", state.lifePath === "high");
+  setModeButtons("stars");
+  $("brand-sub").textContent = "Star lifecycle · cosmic time scrub";
+  $("earth-bar")?.classList.add("hidden");
+  $("life-bar")?.classList.remove("hidden");
+  setSolarSystemVisible(false);
+  if (earthTheater) {
+    earthTheater.root.visible = false;
+  }
+  if (starLife) {
+    starLife.root.visible = true;
+    starLife.playing = false;
+    applyLifecyclePath(state.lifePath, state.lifeEnd);
+  }
+  bloom.strength = 0.72;
+  applyCameraFrame(getLifecycleCameraFrame(), { dur: 1.2 });
+  syncLifecycleHud();
+}
+
 function setViewMode(mode) {
   if (mode === "solar") enterSolarMode();
   else if (mode === "leo") enterLeoMode();
+  else if (mode === "stars") enterStarsMode();
   else enterEarthMode();
 }
 
@@ -1250,6 +1376,12 @@ function wireHud() {
       else enterEarthMode();
     } else if (state.viewMode === "leo") {
       enterLeoMode();
+    } else if (state.viewMode === "stars") {
+      if (starLife) {
+        setLifecycleProgress(starLife, 0);
+        starLife.playing = false;
+        syncLifecycleHud();
+      }
     } else {
       focusBody(state.focusId);
     }
@@ -1263,6 +1395,28 @@ function wireHud() {
   $("btn-solar")?.addEventListener("click", () => setViewMode("solar"));
   $("btn-earth")?.addEventListener("click", () => setViewMode("earth"));
   $("btn-leo")?.addEventListener("click", () => setViewMode("leo"));
+  $("btn-stars")?.addEventListener("click", () => setViewMode("stars"));
+
+  const lifeScrub = $("life-scrub");
+  lifeScrub?.addEventListener("input", () => {
+    if (!starLife || state.viewMode !== "stars") return;
+    state.playing = false;
+    starLife.playing = false;
+    updatePlayIcons();
+    setLifecycleProgress(starLife, Number(lifeScrub.value) / 1000);
+    syncLifecycleHud();
+  });
+  // Touch-friendly: pause sim while dragging scrubber
+  lifeScrub?.addEventListener("pointerdown", () => {
+    state.playing = false;
+    if (starLife) starLife.playing = false;
+    updatePlayIcons();
+  });
+
+  $("life-mass-low")?.addEventListener("click", () => applyLifecyclePath("low", state.lifeEnd));
+  $("life-mass-high")?.addEventListener("click", () => applyLifecyclePath("high", state.lifeEnd));
+  $("life-end-ns")?.addEventListener("click", () => applyLifecyclePath("high", "ns"));
+  $("life-end-bh")?.addEventListener("click", () => applyLifecyclePath("high", "bh"));
 
   // Click launch sites on globe
   renderer.domElement.addEventListener("pointerdown", (e) => {
@@ -1341,6 +1495,8 @@ function wireHud() {
       setViewMode("leo");
     } else if (e.key === "s" || e.key === "S") {
       setViewMode("solar");
+    } else if (e.key === "t" || e.key === "T") {
+      setViewMode("stars");
     } else if (e.key === "p" || e.key === "P") {
       if (state.viewMode === "solar") focusBody("pluto");
     } else if (e.key >= "1" && e.key <= "9") {
@@ -1386,7 +1542,12 @@ function animate() {
     if (u >= 1) camTween = null;
   }
 
-  if (state.viewMode !== "solar" && earthTheater) {
+  if (state.viewMode === "stars" && starLife) {
+    if (state.playing) starLife.playing = true;
+    else starLife.playing = false;
+    const stage = updateStarLifecycle(starLife, dt);
+    syncLifecycleHud(stage);
+  } else if (state.viewMode !== "solar" && earthTheater) {
     const { phaseLabel, cameraHint } = updateEarthTheater(earthTheater, dt, {
       autoPlay: state.playing,
     });
@@ -1413,8 +1574,14 @@ function animate() {
 
   controls.update();
 
-  simDateEl.textContent = formatDate(state.epoch, state.simDays);
-  simElapsedEl.textContent = formatElapsed(state.simDays);
+  if (state.viewMode === "stars" && starLife) {
+    simDateEl.textContent = "lifecycle";
+    simElapsedEl.textContent = (starLife.t * 100).toFixed(1) + "%";
+    speedReadout.textContent = state.lifePath === "high" ? "HIGH" : "LOW";
+  } else {
+    simDateEl.textContent = formatDate(state.epoch, state.simDays);
+    simElapsedEl.textContent = formatElapsed(state.simDays);
+  }
 
   composer.render();
 }
@@ -1424,6 +1591,8 @@ function init() {
   buildSystem();
   earthTheater = createEarthTheater();
   scene.add(earthTheater.root);
+  starLife = createStarLifecycle();
+  scene.add(starLife.root);
   buildBodyList();
   buildEarthSitesUI();
   wireHud();

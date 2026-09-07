@@ -47,6 +47,7 @@
         <button type="button" class="mode-btn active" id="btn-solar" title="Solar system (S)">Solar</button>
         <button type="button" class="mode-btn" id="btn-earth" title="Earth surface · launch sites (E)">Earth</button>
         <button type="button" class="mode-btn" id="btn-leo" title="Low Earth Orbit (L)">LEO</button>
+        <button type="button" class="mode-btn" id="btn-stars" title="Star lifecycle (T)">Stars</button>
       </div>
     </div>
   </header>
@@ -63,6 +64,36 @@
       <div class="earth-missions" id="earth-missions"></div>
     </div>
     <div class="earth-phase" id="earth-phase">—</div>
+  </div>
+
+  <!-- Star lifecycle scrubber -->
+  <div class="life-bar hidden" id="life-bar">
+    <div class="life-bar-head">
+      <strong id="life-bar-title">Star lifecycle</strong>
+      <span class="earth-caption" id="life-caption">Scrub cosmic time · mass path forks after the giant phase</span>
+    </div>
+    <div class="life-mass" role="group" aria-label="Mass path">
+      <button type="button" class="life-mass-btn active" id="life-mass-low" data-path="low">Sun-like · low mass</button>
+      <button type="button" class="life-mass-btn" id="life-mass-high" data-path="high">Massive · high mass</button>
+      <div class="life-end" id="life-end-wrap">
+        <span class="life-end-label">End state</span>
+        <button type="button" class="life-mass-btn life-end-btn active" id="life-end-ns" data-end="ns">Neutron star</button>
+        <button type="button" class="life-mass-btn life-end-btn" id="life-end-bh" data-end="bh">Black hole</button>
+      </div>
+    </div>
+    <div class="life-track-wrap">
+      <div class="life-fork" id="life-fork" aria-hidden="true">
+        <span class="life-fork-low">PN → WD</span>
+        <span class="life-fork-high">SN → NS / BH</span>
+      </div>
+      <input type="range" id="life-scrub" min="0" max="1000" value="0" step="1" aria-label="Cosmic time scrubber" />
+      <div class="life-ticks" id="life-ticks"></div>
+    </div>
+    <div class="life-stage-row">
+      <div class="life-stage-name mono" id="life-stage-name">Molecular cloud</div>
+      <div class="life-era mono" id="life-era">0 — formation</div>
+    </div>
+    <p class="life-note" id="life-note">Cold H₂ / dust lanes collapse under gravity. Dense cores seed stars.</p>
   </div>
 
   <!-- Left: focus / layers -->
@@ -157,7 +188,7 @@
       </button>
     </div>
     <p class="hint-bar">
-      <kbd>drag</kbd> orbit · <kbd>scroll</kbd> zoom · <kbd>space</kbd> pause · <kbd>S</kbd> solar · <kbd>E</kbd> earth · <kbd>L</kbd> LEO · <kbd>P</kbd> Pluto · <kbd>1–9</kbd> focus · <kbd>C</kbd> Halley · <kbd>R</kbd> reset
+      <kbd>drag</kbd> orbit · <kbd>scroll</kbd> zoom · <kbd>space</kbd> pause · <kbd>S</kbd> solar · <kbd>E</kbd> earth · <kbd>L</kbd> LEO · <kbd>T</kbd> stars · <kbd>P</kbd> Pluto · <kbd>1–9</kbd> focus · <kbd>C</kbd> Halley · <kbd>R</kbd> reset
     </p>
   </footer>
 

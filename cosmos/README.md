@@ -1,6 +1,6 @@
 # Cosmos
 
-Interactive **Three.js** solar system, Earth launch theater, and LEO mode.
+Interactive **Three.js** solar system, Earth launch theater, LEO mode, and star lifecycle scrubber.
 
 ## Live (canonical)
 
@@ -44,5 +44,8 @@ Prefer the live Pages URL for sharing and “done” checks.
 | **S** | Solar system |
 | **E** | Earth surface · launch sites only |
 | **L** | LEO theater |
+| **T** | Star lifecycle · cosmic time scrub (mass fork) |
+
+In **Stars** mode: scrub the timeline (or tap stage ticks); toggle **Sun-like** vs **Massive**. After the giant phase the tracks fork — low mass → planetary nebula → white dwarf; high mass → supernova → neutron star or black hole.
 
 See `NEXT.md` for backlog.

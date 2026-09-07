@@ -27,3 +27,4 @@
 - [x] Earth surface separate from solar; site zoom + modern launch sequences
 - [x] LEO as its own mode
 - [x] **Ship under Pixelloid monorepo** → github.io/pixelloid/cosmos/
+- [x] **Star lifecycle** time scrub (Stars / **T**) — mass fork PN→WD vs SN→NS/BH
